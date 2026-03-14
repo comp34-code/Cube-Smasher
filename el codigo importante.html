@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cube Smasher: Abilities Edition</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: #020205;
+            font-family: 'Segoe UI', sans-serif;
+            user-select: none;
+            cursor: pointer;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .container {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px 25px;
+            border-left: 5px solid #00d4ff;
+            color: white;
+            transition: border-color 0.5s ease;
+            backdrop-filter: blur(5px);
+        }
+        #level-container { border-left-color: #ffaa00; }
+        
+        .label { font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1.5px; }
+        .val { font-size: 2rem; font-weight: bold; display: block; }
+        #score-val { color: #00d4ff; text-shadow: 0 0 10px rgba(0,212,255,0.5); }
+        #level-val { color: #ffaa00; text-shadow: 0 0 10px rgba(255,170,0,0.5); }
+        
+        #skin-menu {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 100;
+        }
+        .skin-btn {
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: all 0.2s;
+            position: relative;
+            pointer-events: auto;
+        }
+        .skin-btn .name { font-size: 0.7rem; font-weight: bold; }
+        .skin-btn .bonus { font-size: 0.5rem; opacity: 0.8; margin-top: 4px; text-align: center; line-height: 1; }
+
+        .skin-btn.locked {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: grayscale(1);
+        }
+        .skin-btn.active {
+            border-color: #00d4ff;
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.5);
+            background: rgba(0, 212, 255, 0.2);
+        }
+        .skin-btn:hover:not(.locked) {
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .skin-tooltip {
+            position: absolute;
+            right: 85px;
+            background: black;
+            padding: 8px 12px;
+            border-radius: 4px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            font-size: 0.8rem;
+            border: 1px solid #333;
+        }
+        .skin-btn:hover .skin-tooltip { opacity: 1; }
+
+        #feedback {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4.5rem;
+            font-weight: 900;
+            pointer-events: none;
+            opacity: 0;
+            text-shadow: 0 0 30px rgba(255,255,255,0.8);
+            transition: opacity 0.3s, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-align: center;
+            z-index: 20;
+        }
+
+        #multiplier-tag {
+            display: block;
+            font-size: 1.8rem;
+            margin-top: -5px;
+            font-weight: 400;
+        }
+
+        #damage-flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 0, 0, 0.4);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 50;
+            transition: opacity 0.1s;
+        }
+
+        #click-prompt {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #555;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="damage-flash"></div>
+    <div id="ui">
+        <div id="score-container" class="container">
+            <span class="label">Puntuación</span>
+            <span id="score-val" class="val">0</span>
+        </div>
+        <div id="level-container" class="container">
+            <span class="label">Sector Actual</span>
+            <span id="level-val" class="val">CYBER CORE</span>
+        </div>
+    </div>
+
+    <div id="skin-menu">
+        <div class="skin-btn active" onclick="selectSkin('default')" id="skin-default">
+            <span class="name">DEF</span>
+            <span class="bonus">Estándar</span>
+            <div class="skin-tooltip">Equilibrado en todo</div>
+        </div>
+        <div class="skin-btn locked" onclick="selectSkin('ghost')" id="skin-ghost">
+            <span class="name">GHO</span>
+            <span class="bonus">Gravedad -</span>
+            <div class="skin-tooltip">Salto ligero y caída lenta</div>
+        </div>
+        <div class="skin-btn locked" onclick="selectSkin('magma')" id="skin-magma">
+            <span class="name">MAG</span>
+            <span class="bonus">Puntos x2</span>
+            <div class="skin-tooltip">Doble puntuación, pero cae rápido</div>
+        </div>
+        <div class="skin-btn locked" onclick="selectSkin('gold')" id="skin-gold">
+            <span class="name">GLD</span>
+            <span class="bonus">Imán Centro</span>
+            <div class="skin-tooltip">Más fácil lograr Centro Perfecto</div>
+        </div>
+        <div class="skin-btn locked" onclick="selectSkin('rainbow')" id="skin-rainbow">
+            <span class="name">RGB</span>
+            <span class="bonus">Velocidad +</span>
+            <div class="skin-tooltip">Movimiento lateral ultra rápido</div>
+        </div>
+    </div>
+
+    <div id="feedback">
+        <span id="fb-main"></span>
+        <span id="multiplier-tag"></span>
+    </div>
+
+    <div id="click-prompt">Haz clic para saltar</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- MOTOR DE SONIDO ---
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSound(type) {
+            if (!audioCtx || audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+
+            switch(type) {
+                case 'jump':
+                    osc.type = 'square'; osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                    gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(); osc.stop(now + 0.1); break;
+                case 'bounce':
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(100, now);
+                    osc.frequency.linearRampToValueAtTime(40, now + 0.15);
+                    gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.15);
+                    osc.start(); osc.stop(now + 0.15); break;
+                case 'hit':
+                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(80, now);
+                    osc.frequency.linearRampToValueAtTime(20, now + 0.2);
+                    gain.gain.setValueAtTime(0.3, now); gain.gain.linearRampToValueAtTime(0, now + 0.2);
+                    osc.start(); osc.stop(now + 0.2); break;
+                case 'fall':
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.exponentialRampToValueAtTime(50, now + 0.8);
+                    gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.8);
+                    osc.start(); osc.stop(now + 0.8); break;
+                case 'fracture':
+                    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.4, audioCtx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+                    const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+                    const noiseGain = audioCtx.createGain(); noiseGain.gain.setValueAtTime(0.3, now);
+                    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                    noise.connect(noiseGain); noiseGain.connect(audioCtx.destination);
+                    noise.start(); break;
+            }
+        }
+
+        // --- LÓGICA DE SKINS Y HABILIDADES ---
+        let currentSkin = 'default';
+        const SKINS = {
+            default: { 
+                name: 'Default', unlock: 0, gravityMult: 1, scoreMult: 1, centerGrace: 1.3, speedMult: 1 
+            },
+            ghost: { 
+                name: 'Ghost', unlock: 10000, gravityMult: 0.7, scoreMult: 1, centerGrace: 1.3, speedMult: 1 
+            },
+            magma: { 
+                name: 'Magma', unlock: 30000, gravityMult: 1.4, scoreMult: 2, centerGrace: 1.3, speedMult: 0.9 
+            },
+            gold: { 
+                name: 'Gold', unlock: 70000, gravityMult: 1, scoreMult: 1, centerGrace: 2.2, speedMult: 1 
+            },
+            rainbow: { 
+                name: 'Rainbow', unlock: 150000, gravityMult: 1, scoreMult: 1.5, centerGrace: 1.5, speedMult: 2.0 
+            }
+        };
+
+        function selectSkin(id) {
+            if (totalScore < SKINS[id].unlock) return;
+            currentSkin = id;
+            document.querySelectorAll('.skin-btn').forEach(btn => btn.classList.remove('active'));
+            const btn = document.getElementById(`skin-${id}`);
+            if (btn) btn.classList.add('active');
+            if (cube && !isBroken) applySkinToMesh(cube);
+            playSound('jump');
+        }
+
+        function checkSkinUnlocks() {
+            Object.keys(SKINS).forEach(id => {
+                const btn = document.getElementById(`skin-${id}`);
+                if (btn && totalScore >= SKINS[id].unlock) {
+                    btn.classList.remove('locked');
+                }
+            });
+        }
+
+        function applySkinToMesh(mesh) {
+            if (!mesh || !mesh.material) return;
+            const map = MAPS[currentLevel];
+            let color = map.color;
+            let emissive = map.color;
+            let opacity = 1.0;
+            let metalness = 0.9;
+            let roughness = 0.1;
+
+            switch(currentSkin) {
+                case 'ghost':
+                    opacity = 0.4; emissive = 0xffffff; break;
+                case 'magma':
+                    color = 0xff3300; emissive = 0xffaa00; break;
+                case 'gold':
+                    color = 0xffd700; emissive = 0xaa8800; metalness = 1.0; roughness = 0.0; break;
+                case 'rainbow':
+                    const h = (Date.now() % 2000) / 2000;
+                    color = new THREE.Color().setHSL(h, 0.8, 0.5); emissive = color; break;
+            }
+
+            mesh.material.color.set(color);
+            mesh.material.emissive.set(emissive);
+            mesh.material.opacity = opacity;
+            mesh.material.metalness = metalness;
+            mesh.material.roughness = roughness;
+            mesh.material.transparent = opacity < 1;
+        }
+
+        // --- VARIABLES DEL JUEGO ---
+        let scene, camera, renderer, cube, light, floor;
+        let fragments = [], cracks = [], obstacles = [];
+        let totalScore = 0, isBroken = false, isFalling = false, currentLevel = 0, time = 0, isInitialized = false;
+        
+        const MAPS = [
+            { name: "CYBER CORE", color: 0x00d4ff, floor: 0x0a0a0f, grid: 0x1a1a25, next: 5000, speed: 0.6, amp: 3, obs: 0 },
+            { name: "MAGMA RIDGE", color: 0xff4400, floor: 0x150500, grid: 0x331100, next: 15000, speed: 1.4, amp: 5, obs: 0 },
+            { name: "VOID SECTOR", color: 0xaa00ff, floor: 0x05000a, grid: 0x150025, next: 35000, speed: 2.2, amp: 7, obs: 1 },
+            { name: "GLITCH ABYSS", color: 0xff0066, floor: 0x0a0005, grid: 0x250015, next: 60000, speed: 3.2, amp: 9, obs: 2 },
+            { name: "SOLAR FLARE", color: 0xffcc00, floor: 0x100a00, grid: 0x251a00, next: 100000, speed: 4.5, amp: 10, obs: 3 },
+            { name: "NEON ZENITH", color: 0x00ffaa, floor: 0x000a05, grid: 0x002515, next: Infinity, speed: 6.0, amp: 12, obs: 4 }
+        ];
+
+        let velocity = new THREE.Vector3(0, 0, 0);
+        let gravity = -0.016, bounce = 0.48, friction = 0.985, shakeIntensity = 0;
+        const floorSize = 12, fractureThreshold = 0.38; 
+
+        function triggerDamageFlash() {
+            const flash = document.getElementById('damage-flash');
+            if (flash) {
+                flash.style.opacity = '1';
+                setTimeout(() => { flash.style.opacity = '0'; }, 150);
+            }
+        }
+
+        function createFloorTexture(gridColor, floorColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const context = canvas.getContext('2d');
+            context.fillStyle = floorColor; context.fillRect(0, 0, 512, 512);
+            context.strokeStyle = gridColor; context.lineWidth = 10;
+            for(let i = 0; i <= 512; i += 64) {
+                context.beginPath(); context.moveTo(i, 0); context.lineTo(i, 512); context.stroke();
+                context.beginPath(); context.moveTo(0, i); context.lineTo(512, i); context.stroke();
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(4, 4);
+            return texture;
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 7, 16);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+
+            const floorGeo = new THREE.BoxGeometry(floorSize, 1.2, floorSize);
+            const floorMat = new THREE.MeshStandardMaterial({ 
+                map: createFloorTexture("#1a1a25", "#0a0a0f"),
+                roughness: 0.2, metalness: 0.7
+            });
+            floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.position.y = -5;
+            scene.add(floor);
+
+            createCube();
+            updateObstacles();
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+            const spotLight = new THREE.SpotLight(0xffffff, 1.2);
+            spotLight.position.set(0, 25, 12);
+            scene.add(spotLight);
+
+            light = new THREE.PointLight(MAPS[0].color, 2.5, 45);
+            scene.add(light);
+
+            isInitialized = true;
+            window.addEventListener('resize', onWindowResize, false);
+            
+            const handleInteraction = (e) => {
+                if (e.target.closest('.skin-btn')) return;
+                initAudio();
+                onMouseDown();
+            };
+            document.addEventListener('mousedown', handleInteraction, false);
+            document.addEventListener('touchstart', handleInteraction, { passive: true });
+        }
+
+        function disposeMesh(mesh) {
+            if (!mesh) return;
+            if (mesh.geometry) mesh.geometry.dispose();
+            if (mesh.material) {
+                if (Array.isArray(mesh.material)) {
+                    mesh.material.forEach(m => m.dispose());
+                } else {
+                    mesh.material.dispose();
+                }
+            }
+            scene.remove(mesh);
+        }
+
+        function createCube() {
+            isBroken = false; 
+            isFalling = false;
+            if (cube) disposeMesh(cube);
+            
+            const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const material = new THREE.MeshStandardMaterial({ emissiveIntensity: 0.3, transparent: true, opacity: 0 });
+            cube = new THREE.Mesh(geometry, material);
+            cube.position.set(0, 10, 0);
+            cube.scale.set(0.05, 0.05, 0.05);
+            applySkinToMesh(cube);
+            velocity.set((Math.random()-0.5)*0.25, -0.06, 0);
+            scene.add(cube);
+        }
+
+        function fractureCube() {
+            if(!cube || isBroken) return;
+            isBroken = true;
+            shakeIntensity = 0.8;
+            playSound('fracture');
+            
+            const skinData = SKINS[currentSkin];
+            const relX = cube.position.x - floor.position.x;
+            const relZ = cube.position.z - floor.position.z;
+            const colorClone = cube.material.color.clone();
+            const posClone = cube.position.clone();
+            const matClone = cube.material.clone();
+
+            // Grieta visual
+            const points = [];
+            for (let i = 0; i < 24; i++) {
+                const angle = (i / 24) * Math.PI * 2;
+                const r = 4.5 * (0.3 + Math.random() * 0.7);
+                points.push(new THREE.Vector3(relX, 0.61, relZ), new THREE.Vector3(relX + Math.cos(angle) * r, 0.61, relZ + Math.sin(angle) * r));
+            }
+            const crackGeo = new THREE.BufferGeometry().setFromPoints(points);
+            const crackMat = new THREE.LineBasicMaterial({ color: colorClone, transparent: true, opacity: 1 });
+            const crackLine = new THREE.LineSegments(crackGeo, crackMat);
+            floor.add(crackLine);
+            cracks.push({ mesh: crackLine, life: 1.0 });
+            
+            const dist = Math.sqrt(relX * relX + relZ * relZ);
+            
+            // HABILIDAD: Gold tiene mayor rango de centro perfecto
+            let mult = (dist < skinData.centerGrace) ? 2 : 1;
+            
+            // HABILIDAD: Magma otorga el doble de base
+            const ptsBase = Math.floor(Math.abs(velocity.y) * 1200);
+            const ptsFinal = Math.floor(ptsBase * skinData.scoreMult) * mult;
+            
+            updateScore(ptsFinal);
+            
+            let fbMain = mult > 1 ? "¡CENTRO PERFECTO!" : `+${ptsFinal}`;
+            let fbSub = mult > 1 ? `BONO x${mult * skinData.scoreMult}` : (skinData.scoreMult > 1 ? "BONO SKIN" : "");
+            showFeedback(fbMain, fbSub, `#${colorClone.getHexString()}`);
+
+            const fragGeo = new THREE.BoxGeometry(0.45, 0.45, 0.45);
+            matClone.emissiveIntensity = 2;
+
+            for(let i = 0; i < 15; i++) {
+                const frag = new THREE.Mesh(fragGeo, matClone);
+                frag.position.copy(posClone);
+                frag.userData.velocity = new THREE.Vector3((Math.random()-0.5)*1.5+velocity.x, Math.abs(velocity.y)*0.9+Math.random()*0.6, (Math.random()-0.5)*1.5);
+                fragments.push(frag); 
+                scene.add(frag);
+            }
+
+            const cubeToRemove = cube;
+            cube = null; 
+            disposeMesh(cubeToRemove);
+
+            setTimeout(() => { 
+                fragments.forEach(f => disposeMesh(f)); 
+                fragments = []; 
+                createCube(); 
+            }, 1800);
+        }
+
+        function updateScore(points) {
+            totalScore += points;
+            const scoreEl = document.getElementById('score-val');
+            if (scoreEl) scoreEl.innerText = totalScore.toLocaleString();
+            checkSkinUnlocks();
+            if (currentLevel < MAPS.length - 1 && totalScore >= MAPS[currentLevel].next) {
+                currentLevel++; 
+                changeMap();
+            }
+        }
+
+        function changeMap() {
+            const map = MAPS[currentLevel];
+            const hex = `#${map.color.toString(16).padStart(6, '0')}`;
+            const levelVal = document.getElementById('level-val');
+            const scoreVal = document.getElementById('score-val');
+            const scoreCont = document.getElementById('score-container');
+            
+            if (levelVal) {
+                levelVal.innerText = map.name;
+                levelVal.style.color = hex;
+            }
+            if (scoreVal) scoreVal.style.color = hex;
+            if (scoreCont) scoreCont.style.borderLeftColor = hex;
+            
+            if (floor && floor.material.map) floor.material.map.dispose();
+            if (floor) floor.material.map = createFloorTexture(`#${map.grid.toString(16).padStart(6, '0')}`, `#${map.floor.toString(16).padStart(6, '0')}`);
+            if (light) light.color.setHex(map.color);
+            updateObstacles();
+            playSound('levelup');
+        }
+
+        function onMouseDown() {
+            if (isBroken || !cube || isFalling) return;
+            
+            // HABILIDAD: Ghost salta un poco más ligero
+            const skinData = SKINS[currentSkin];
+            velocity.y = 0.62 / (skinData.gravityMult < 1 ? 0.9 : 1); 
+            
+            velocity.x += (Math.random() - 0.5) * 0.9 * skinData.speedMult;
+            playSound('jump');
+            if (cube.material) {
+                cube.material.emissiveIntensity = 5;
+                setTimeout(() => { if(cube && cube.material) cube.material.emissiveIntensity = 0.3; }, 100);
+            }
+        }
+
+        function updatePhysics() {
+            if(!isInitialized) return;
+            time += 0.01;
+            const map = MAPS[currentLevel];
+            const skinData = SKINS[currentSkin];
+            
+            if (floor) floor.position.x = Math.sin(time * map.speed) * map.amp;
+
+            if (currentSkin === 'rainbow' && cube && !isBroken && cube.material) {
+                const h = (Date.now() % 2000) / 2000;
+                cube.material.color.setHSL(h, 0.8, 0.5);
+                cube.material.emissive.setHSL(h, 0.8, 0.5);
+            }
+
+            obstacles.forEach(o => {
+                if (currentLevel >= 2 && o.mesh) {
+                    o.mesh.position.x = Math.cos(time * 2 + o.offset) * (map.amp + 2);
+                    o.mesh.position.y = o.yPos;
+                    if (!isBroken && cube && cube.position.distanceTo(o.mesh.position) < 1.5) {
+                        velocity.x += (cube.position.x - o.mesh.position.x) * 0.8;
+                        velocity.y *= 0.5; 
+                        shakeIntensity = 0.5; 
+                        triggerDamageFlash(); 
+                        playSound('hit');
+                    }
+                }
+            });
+
+            if (shakeIntensity > 0) {
+                camera.position.x = (Math.random() - 0.5) * shakeIntensity;
+                camera.position.y = 7 + (Math.random() - 0.5) * shakeIntensity;
+                shakeIntensity *= 0.92;
+            } else {
+                camera.position.x = 0;
+            }
+
+            if (!isBroken && cube) {
+                if (cube.material && cube.material.opacity < 1 && currentSkin !== 'ghost') {
+                    cube.material.opacity += 0.04;
+                }
+                
+                if (cube.scale.x < 1) {
+                    const grow = (1 - cube.scale.x) * 0.08;
+                    cube.scale.x = cube.scale.y = cube.scale.z += grow;
+                }
+                
+                // HABILIDAD: Gravedad modificada por skin
+                velocity.y += gravity * skinData.gravityMult; 
+                cube.position.add(velocity);
+                
+                if (light) {
+                    light.position.copy(cube.position);
+                    light.position.y += 2.5;
+                }
+
+                const groundY = floor.position.y + 1.35; 
+                if (cube.position.y < groundY) {
+                    if (Math.abs(cube.position.x - floor.position.x) < floorSize / 2) {
+                        if (Math.abs(velocity.y) > fractureThreshold) {
+                            fractureCube();
+                            return; 
+                        } else {
+                            cube.position.y = groundY; 
+                            velocity.y *= -bounce;
+                            
+                            // HABILIDAD: Rainbow se mueve más lateralmente por inercia
+                            const slideMult = skinData.speedMult > 1 ? 0.04 : 0.02;
+                            velocity.x = (velocity.x * friction) + (Math.cos(time * map.speed) * map.speed * slideMult);
+                            if (Math.abs(velocity.y) > 0.05) playSound('bounce');
+                        }
+                    } else if (!isFalling) {
+                        isFalling = true; 
+                        triggerDamageFlash(); 
+                        playSound('fall');
+                    }
+                }
+                
+                if (isFalling && cube.position.y < -25) {
+                    createCube();
+                    return;
+                }
+
+                if (cube) {
+                    cube.rotation.x += velocity.y * 0.2; 
+                    cube.rotation.y += velocity.x * 0.2;
+                }
+            } else if (fragments.length > 0) {
+                fragments.forEach(f => {
+                    if (f.userData && f.userData.velocity) {
+                        f.userData.velocity.y += gravity; 
+                        f.position.add(f.userData.velocity);
+                        if (f.position.y < floor.position.y + 0.8) { 
+                            f.position.y = floor.position.y + 0.8; 
+                            f.userData.velocity.y *= -0.2; 
+                        }
+                    }
+                });
+            }
+
+            cracks.forEach((c, i) => {
+                c.life -= 0.01; 
+                if (c.mesh && c.mesh.material) {
+                    c.mesh.material.opacity = Math.max(0, c.life);
+                }
+                if (c.life <= 0) { 
+                    if (floor) floor.remove(c.mesh); 
+                    if (c.mesh.geometry) c.mesh.geometry.dispose();
+                    if (c.mesh.material) c.mesh.material.dispose();
+                    cracks.splice(i, 1); 
+                }
+            });
+        }
+
+        function showFeedback(mainText, subText, color) {
+            const fb = document.getElementById('feedback');
+            const fbMain = document.getElementById('fb-main');
+            const fbSub = document.getElementById('multiplier-tag');
+            if (fb && fbMain && fbSub) {
+                fbMain.innerText = mainText;
+                fbSub.innerText = subText;
+                fb.style.color = color; 
+                fb.style.opacity = 1; 
+                fb.style.transform = "translate(-50%, -50%) scale(1.2)";
+                setTimeout(() => { 
+                    fb.style.opacity = 0; 
+                    fb.style.transform = "translate(-50%, -50%) scale(1)"; 
+                }, 1200);
+            }
+        }
+
+        function updateObstacles() {
+            obstacles.forEach(o => { if(o.mesh) disposeMesh(o.mesh); });
+            obstacles = [];
+            const map = MAPS[currentLevel];
+            if (map.obs > 0) {
+                for (let i = 0; i < map.obs; i++) {
+                    const mesh = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.3, 0.3, 4, 16), 
+                        new THREE.MeshStandardMaterial({ color: map.color, emissive: map.color, emissiveIntensity: 2 })
+                    );
+                    mesh.rotation.z = Math.PI/2; 
+                    scene.add(mesh);
+                    obstacles.push({ mesh, offset: i * Math.PI, yPos: 2 - (i * 2.5) });
+                }
+            }
+        }
+
+        function onWindowResize() { 
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight; 
+                camera.updateProjectionMatrix(); 
+                renderer.setSize(window.innerWidth, window.innerHeight); 
+            }
+        }
+
+        function animate() { 
+            requestAnimationFrame(animate); 
+            updatePhysics(); 
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera); 
+            }
+        }
+
+        window.onload = () => { 
+            init(); 
+            animate(); 
+        };
+    </script>
+</body>
+</html>
